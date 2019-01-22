@@ -2,31 +2,40 @@ import os
 import corenlp
 import numpy as np
 import rouge
+import gensim
 from my_flags import FLAGS
 from sklearn.model_selection import train_test_split
-import gensim
-
 
 PAD_ID = 0
 UNK_ID = 1
 
-
 class Data:
-    def __init__(self, reset=False):
+    def __init__(self, reset=False, feature_set=FLAGS.all_features):
+
+        #----------------------- FLAGS -----------------------
+
+        self.new_stories = reset
+        self.feature_set = feature_set
+
+        #----------------------- DATA VARIABLES -----------------------
+
         self.train_data = []
         self.val_data = []
         self.test_data = []
+
+        #----------------------- LABEL VARIABLES -----------------------
 
         self.train_labels = []
         self.val_labels = []
         self.test_labels = []
 
-        self.new_stories = reset
-
         stories, train_stories, val_stories, test_stories = self.split_dataset(reset)
 
-        self.nlp_client = corenlp.CoreNLPClient(endpoint="http://localhost:8000",
-                                                annotators="tokenize ssplit".split())
+        #----------------------- TOOLS -----------------------
+
+        self.nlp_client = corenlp.CoreNLPClient(
+            endpoint="http://localhost:8000",
+            annotators="tokenize ssplit".split())
         self.rouge_evaluator = rouge.Rouge(
             metrics=['rouge-n', 'rouge-l', 'rouge-w'],
             max_n=2,
@@ -34,16 +43,26 @@ class Data:
             alpha=0.5,  # Default F1_score
             weight_factor=1.2,
             stemming=True)
-
-        self.train_labels = self.label_dataset(train_stories, FLAGS.training_data_dir)
-        self.val_labels = self.label_dataset(val_stories, FLAGS.validation_data_dir)
-        self.test_labels = self.label_dataset(test_stories, FLAGS.test_data_dir)
-
         self.word2vec_model = None
 
-        self.create_word_embeddings(test_stories, FLAGS.test_data_dir)
-        self.create_word_embeddings(val_stories, FLAGS.validation_data_dir)
-        # self.create_word_embeddings(train_stories, FLAGS.training_data_dir)
+        # ----------------------- CREATE LABELS -----------------------
+        train_doc_labels = self.label_dataset(train_stories, FLAGS.training_data_dir)
+        val_doc_labels = self.label_dataset(val_stories, FLAGS.validation_data_dir)
+        test_doc_labels = self.label_dataset(test_stories, FLAGS.test_data_dir)
+
+        # ----------------------- CREATE DOCUMENT EMBEDDINGS -----------------------
+        for i in range(1,8):
+            self.create_word_embeddings(train_stories[10000*(i-1):10000*i], FLAGS.training_data_dir, name='document_embeddings' + str(i))
+        self.create_word_embeddings(train_stories[70000:], FLAGS.training_data_dir, name='document_embeddings8')
+        train_doc_embeddings = self.load_training_data_document_embeddings()
+        val_doc_embeddings = self.create_word_embeddings(val_stories, FLAGS.validation_data_dir)
+        test_doc_embeddings = self.create_word_embeddings(test_stories, FLAGS.test_data_dir)
+
+        # ----------------------- CREATE FEATURE SETS AND CORRESPONDING LABELS -----------------------
+        if feature_set == FLAGS.sent_embed:
+            (self.train_data, self.train_labels) = self.setup_input_data_embed_only(train_doc_embeddings, train_doc_labels, 'training')
+            (self.val_data, self.val_labels) = self.setup_input_data_embed_only(val_doc_embeddings, val_doc_labels, 'validation')
+            (self.test_data, self.test_labels) = self.setup_input_data_embed_only(test_doc_embeddings, test_doc_labels, 'testing')
 
     def split_dataset(self, reset):
         print('================ Splitting data into training, validation and test set ================')
@@ -134,10 +153,9 @@ class Data:
             result += t.word + ' '
         return result
 
-    def create_word_embeddings(self, data_stories, dest):
+    def create_word_embeddings(self, data_stories, dest, name='document_embeddings'):
         print('================ Creating word embeddings for {0} ================'.format(dest))
-        print(os.path.exists(dest + 'document_embeddings.npy'))
-        if self.new_stories or not os.path.exists(dest + 'document_embeddings.npy'):
+        if self.new_stories or not os.path.exists(dest +  name + '.npy'):
             if self.word2vec_model is None:
                 print('------------------------ Loading word2vec model ------------------------')
                 self.word2vec_model = gensim.models.KeyedVectors.load_word2vec_format(FLAGS.google_news_word2vec, binary=True)
@@ -156,10 +174,11 @@ class Data:
                         i += 1
                         if i % 5000 == 0:
                             print('{0} documents done!'.format(i))
-            np.save(dest + 'document_embeddings', document_embeddings)
+            print(document_embeddings[:1])
+            np.save(dest +  name, document_embeddings)
         else:
-            print('------------------------ Loading from previous files ------------------------')
-            document_embeddings = np.load(dest + 'document_embeddings.npy')
+            print('------------------------ Loading from previous file: {0}{1}.npy------------------------'.format(dest, name))
+            document_embeddings = np.load(dest +  name + '.npy')
         print(np.shape(document_embeddings))
         print(np.shape(document_embeddings[0]))
         return document_embeddings
@@ -177,98 +196,36 @@ class Data:
                 word_vectors.append(self.word2vec_model[str(token.value)])
         return np.mean(word_vectors, axis=0)
 
+    def load_training_data_document_embeddings(self):
+        print('================ Stitching word embeddings for training data together ================')
+        train_doc_embeds = []
+        for i in range(1,9):
+            next_doc_embeds = np.load(FLAGS.training_data_dir + 'document_embeddings' + str(i) + '.npy')
+            for doc in next_doc_embeds:
+                train_doc_embeds.append(doc)
+            print(np.shape(train_doc_embeds))
+
+        print(np.shape(train_doc_embeds))
+        print(np.shape(train_doc_embeds[0]))
+        return train_doc_embeds
+
+    def setup_input_data_embed_only(self, doc_features, doc_labels, type):
+        print('================ Readying data for {0} ================'.format(type))
+        data, labels = [], []
+        for doc_feature, doc_label in zip(doc_features, doc_labels):
+            assert len(doc_feature) == len(doc_label)
+            for sent_feature, sent_label in zip (doc_feature, doc_label):
+                data.append(sent_feature)
+                labels.append(sent_label)
+        print(np.shape(data))
+        print(np.shape(data[0]))
+        print(data[0])
+        print(np.shape(labels))
+        print(labels[0])
+        return data, labels
 
 def main():
-    data = Data()
-    # nlp_client = corenlp.CoreNLPClient(endpoint="http://localhost:8000", annotators="tokenize ssplit".split())
-    # rouge_evaluator = rouge.Rouge(
-    #     metrics=['rouge-n', 'rouge-l', 'rouge-w'],
-    #     max_n=2,
-    #     apply_avg=True,
-    #     alpha=0.5,  # Default F1_score
-    #     weight_factor=1.2,
-    #     stemming=True)
-    #
-    # print('==================================== Preparing data ====================================')
-    #
-    # print('Nr. of stories: {0}'.format(len(stories)))
-    #
-    #
-    #
-    # print('________________ Preparing the training data __________________')
-    # print('Nr. of training data stories: {0}'.format(len(train_stories)))
-    # all_text_file = open(FLAGS.training_data_dir + 'all_text', 'w')
-    # labels_file = open(FLAGS.training_data_dir + 'labels.bin', 'w')
-    # training_stories_file = open(FLAGS.training_data_dir + 'stories.bin', 'w')
-    # i = 0
-    # for s in train_stories:
-    #     with open(FLAGS.cnn_stories_dir + s, 'rb') as story:
-    #         r = story.read().decode('utf-8')
-    #         highlights = [h.replace('\n\n','') for h in r.split('@highlight')[1:]]
-    #         body = r.split('@highlight')[0]
-    #         ann = nlp_client.annotate(body)
-    #         sentences = [ann2sentence(s) for s in ann.sentence]
-    #         if len(sentences) == 0:
-    #             print('No Sentences: ')
-    #         else:
-    #             for l in label_document(sentences, highlights, rouge_evaluator):
-    #                 labels_file.write(str(l) + ' ')
-    #             labels_file.write('\n')
-    #             for sentence in ann.sentence:
-    #                 for token in sentence.token:
-    #                     all_text_file.write(token.word + ' ')
-    #             training_stories_file.write(s + '\n')
-    #             all_text_file.write('\n')
-    #             i += 1
-    #             if i % 5000 == 0:
-    #                 print('{0} documents done!'.format(i))
-    #
-    # print('________________ Word2Vec: Phrases __________________')
-    # word2vec.word2phrase(FLAGS.training_data_dir + 'all_text',
-    #                      FLAGS.training_data_dir + 'all_text_phrases', verbose=True)
-    # print('________________ Word2Vec: Training __________________')
-    # word2vec.word2vec(FLAGS.training_data_dir + 'all_text_phrases',
-    #                   FLAGS.training_data_dir + 'word2vec_model.bin', size=100, verbose=True)
-    #
-    # model = word2vec.load(FLAGS.training_data_dir + 'word2vec_model.bin')
-    # print('________________ Word2Vec model ready! ________________')
-    # print('________________ Preparing the test data __________________')
-    #
-    # print('Nr. of test data stories: {0}'.format(len(test_stories)))
-    #
-    # test_highlights_file = open(FLAGS.test_data_dir + 'highlights.bin', 'w')
-    # test_body_file = open(FLAGS.test_data_dir + 'body.bin', 'w')
-    # test_stories_file = open(FLAGS.test_data_dir + 'stories.bin', 'w')
-    # for s in test_stories:
-    #     with open(FLAGS.cnn_stories_dir + s, 'rb') as story:
-    #         r = story.read().decode('utf-8')
-    #         highlights = [h.replace('\n\n', '|') for h in r.split('@highlight')[1:]]
-    #         body = r.split('@highlight')[0]
-    #         ann = nlp_client.annotate(body)
-    #         sentences = [ann2sentence(s) + '\n' for s in ann.sentence]
-    #         print(ann.sentence)
-    #         if len(sentences) > 0:
-    #             test_highlights_file.write(''.join(highlights) + '\n--\n')
-    #             test_stories_file.write(s + '\n')
-    #             test_body_file.write(''.join(sentences) + '\n--\n')
-    #
-    # print('________________ Preparing the val data __________________')
-    # validation_highlights_file = open(FLAGS.validation_data_dir + 'highlights.bin', 'w')
-    # validation_body_file = open(FLAGS.validation_data_dir + 'body.bin', 'w')
-    # print('Nr. of val data stories: {0}'.format(len(val_stories)))
-    # validation_stories_file = open(FLAGS.validation_data_dir + 'stories.bin', 'w')
-    # for s in val_stories:
-    #     with open(FLAGS.cnn_stories_dir + s, 'rb') as story:
-    #         r = story.read().decode('utf-8')
-    #         highlights = [h.replace('\n\n', '|') for h in r.split('@highlight')[1:]]
-    #         body = r.split('@highlight')[0]
-    #         ann = nlp_client.annotate(body)
-    #         sentences = [ann2sentence(s) + '\n' for s in ann.sentence]
-    #         if len(sentences) > 0:
-    #             validation_highlights_file.write(''.join(highlights) + '\n--\n')
-    #             validation_stories_file.write(s + '\n')
-    #             validation_body_file.write(''.join(sentences) + '\n--\n')
-
+    data = Data(feature_set=FLAGS.sent_embed)
 
 if __name__ == '__main__':
     main()

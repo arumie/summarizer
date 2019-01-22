@@ -10,11 +10,19 @@ tf.app.flags.DEFINE_string("validation_data_dir", '../data/processed/val/', "Dir
 tf.app.flags.DEFINE_string("cnn_stories_dir", '../../cnn/stories/', "Directory for the CNN stories")
 tf.app.flags.DEFINE_string("dm_stories_dir", '../../dailymail/stories/', "Directory for the DailyMail stories")
 tf.app.flags.DEFINE_string("google_news_word2vec", '../../GoogleNews-vectors-negative300.bin', "Location for the Google News trained word2vec")
+
+tf.app.flags.DEFINE_string("model_checkpoints_dir", '../data/model/stories/', "Directory for the CNN stories")
+
 ## PARAMETERS
 
 tf.app.flags.DEFINE_integer('training_data_percent', 80, 'The percentage of the data that should be training data')
 tf.app.flags.DEFINE_integer('test_data_percent', 10, 'The percentage of the data that should be training data')
 tf.app.flags.DEFINE_integer('val_data_percent', 10, 'The percentage of the data that should be training data')
+
+
+tf.app.flags.DEFINE_integer('sent_embed', 0, 'Specifies that the input data only consists of sentence embeddings')
+tf.app.flags.DEFINE_integer('sent_embed_plus_x', 1, 'The percentage of the data that should be training data')
+tf.app.flags.DEFINE_integer('all_features', 3, 'The input data ')
 
 
 ## OTHER
