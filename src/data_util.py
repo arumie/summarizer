@@ -11,6 +11,9 @@ UNK_ID = 1
 
 class Data:
     def __init__(self, reset=False, feature_set=FLAGS.all_features):
+        if not os.path.exists(FLAGS.training_data_dir): os.makedirs(FLAGS.training_data_dir)
+        if not os.path.exists(FLAGS.validation_data_dir): os.makedirs(FLAGS.validation_data_dir)
+        if not os.path.exists(FLAGS.test_data_dir): os.makedirs(FLAGS.test_data_dir)
 
         #----------------------- FLAGS -----------------------
 
@@ -219,13 +222,5 @@ class Data:
                 labels.append(sent_label)
         print(np.shape(data))
         print(np.shape(data[0]))
-        print(data[0])
         print(np.shape(labels))
-        print(labels[0])
         return data, labels
-
-def main():
-    data = Data(feature_set=FLAGS.sent_embed)
-
-if __name__ == '__main__':
-    main()

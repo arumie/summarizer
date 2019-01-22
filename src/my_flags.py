@@ -21,6 +21,9 @@ tf.app.flags.DEFINE_integer('val_data_percent', 10, 'The percentage of the data 
 
 
 tf.app.flags.DEFINE_integer('sent_embed', 0, 'Specifies that the input data only consists of sentence embeddings')
+tf.app.flags.DEFINE_integer('sent_embed_input_length', 300, 'Input length of the features set')
+
+
 tf.app.flags.DEFINE_integer('sent_embed_plus_x', 1, 'The percentage of the data that should be training data')
 tf.app.flags.DEFINE_integer('all_features', 3, 'The input data ')
 
