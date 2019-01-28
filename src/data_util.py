@@ -106,7 +106,7 @@ class Data:
             print('------------ Making base predictions --------------')
             i = 0
             for doc in test_doc_embeddings:
-                self.baseline_predictions.append([1 for i in range(0, len(doc))])
+                self.baseline_predictions.append([1 if i<=2 else 0 for i in range(0, len(doc))])
                 i += 1
                 if i % 1000 == 0:
                     print(i)
@@ -142,9 +142,6 @@ class Data:
                         doc_all_features.append(np.concatenate((sent_embedding, feature_values), axis=0))
 
                 self.evaluation_doc_features.append(doc_all_features)
-            print(self.evaluation_doc_features[0][0])
-
-        print(self.evaluation_doc_features[0])
 
 
     def split_dataset(self, reset):
@@ -387,7 +384,6 @@ class Data:
     def setup_input_data_all_features(self, doc_embeddings, doc_features, doc_labels, type):
         print('================ Readying data for {0} ================'.format(type))
         doc_features_keys = ['DOC_SENT', 'DOC_WRD', 'DOC_CHAR', 'DOC_AVG_SENT_LEN']
-        print(doc_features[0])
         data, labels = [], []
         for doc_embedding, doc_feature, doc_label in zip(doc_embeddings, doc_features, doc_labels):
             assert len(doc_embedding) == len(doc_label)
@@ -396,9 +392,8 @@ class Data:
             for sent_embedding, sent_pos, sent_pos_tag, sent_len, sent_label in zip(doc_embedding, sent_positions, sent_pos_tags, sent_lens, doc_label):
                 if np.shape(sent_embedding) == (300,):
                     feature_values = np.concatenate((doc_values, [sent_pos, sent_pos_tag, sent_len]), axis=0)
-                    data.append(np.concatenate((np.multiply(sent_embedding), feature_values), axis=0))
+                    data.append(np.concatenate((sent_embedding, feature_values), axis=0))
                     labels.append(sent_label)
-        print(data[0])
         print(np.shape(data[0]))
         print(np.shape(labels))
         return data, labels
@@ -406,7 +401,6 @@ class Data:
     def setup_input_data_only_doc_features(self, doc_features, doc_labels, type):
         print('================ Readying data for {0} ================'.format(type))
         doc_features_keys = ['DOC_SENT', 'DOC_WRD', 'DOC_CHAR', 'DOC_AVG_SENT_LEN']
-        print(doc_features[0])
         data, labels = [], []
         for doc_feature, doc_label in zip(doc_features, doc_labels):
             doc_values = [doc_feature[key] for key in doc_features_keys]
@@ -415,7 +409,6 @@ class Data:
                     feature_values = np.concatenate((doc_values, [sent_pos, sent_pos_tag, sent_len]), axis=0)
                     data.append(feature_values)
                     labels.append(sent_label)
-        print(data[0])
         print(np.shape(data[0]))
         print(np.shape(labels))
         return data, labels

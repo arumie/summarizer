@@ -20,8 +20,9 @@ class Model:
         print('==========================================================')
         print('|                    Setting up data                     |')
         print('==========================================================')
+
         self.data = Data(feature_set=feature_set.default)
-        self.calculate_avg_rouge(self.data.baseline_predictions, 'baseline2')
+
         print('==========================================================')
         print('|                     Setup model                        |')
         print('==========================================================')
@@ -62,8 +63,10 @@ class Model:
         if self.type == 'NN':
             with tf.device('/gpu:0'):
                 self.model.fit(
-                    np.array(self.data.train_data[:100000]),
-                    np.array(self.data.train_labels[:100000]),
+                    np.array(self.data.train_data),
+                    np.array(self.data.train_labels),
+                    validation_data=(np.array(self.data.val_data), np.array(self.data.val_labels)),
+                    batch_size=10000,
                     epochs=10,
                     callbacks=[self.create_callback()],
                     verbose=1)
@@ -74,6 +77,8 @@ class Model:
     def evaluate_model(self):
         print('============================ Calculate Baseline Rouge ==============================')
 
+        self.calculate_avg_rouge(self.data.baseline_predictions, 'baseline')
+
         predictions = []
 
         if self.type == 'NN':
@@ -81,9 +86,7 @@ class Model:
             print(self.model.evaluate(np.array(self.data.test_data), np.array(self.data.test_labels)))
             print(np.array(self.data.evaluation_doc_features[0]))
             for doc in self.data.evaluation_doc_features:
-                for d in doc:
-                    print(d, np.shape(d))
-                predictions.append([self.model.predict(np.array(d)) for d in doc])
+                predictions.append([self.model.predict(np.array(d.reshape(1,-1))) for d in doc])
 
 
         if self.type == 'SVM':
@@ -95,7 +98,7 @@ class Model:
         self.calculate_avg_rouge(predictions, self.type + '_' + self.feature_set.name)
 
     def calculate_avg_rouge(self, predictions, name):
-        if name == 'baseline2' and os.path.exists('../data/model/rouge_baseline2.npy'):
+        if name == 'baseline' and os.path.exists('../data/model/rouge_baseline.npy'):
             avg_rouge_scores = np.load('../data/model/rouge_baseline.npy')
         else:
             print(predictions[0])
